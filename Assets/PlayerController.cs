@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.Rendering;
 
 using UnityEngine;
+using UnityEngine.Rendering;
 
 [Flags]
 public enum PlayerState
@@ -244,9 +245,13 @@ public class PlayerController : MonoBehaviour
 {
     public Rigidbody2D Player;
     public PlayerState MovementState = PlayerState.Idle;
+
+    public Animator PlayerAnimatorIdle;
     public Animator PlayerAnimatorTop;
     public Animator PlayerAnimatorBottom;
-    public SpriteRenderer PlayerSpriteRendererTop;
+
+    public SpriteRenderer PlayerSpriteRendererIdle;    
+    public SpriteRenderer PlayerSpriteRendererTop;          
     public SpriteRenderer PlayerSpriteRendererBottom;
 
     public float RunAcceleration = 1f;
@@ -298,6 +303,8 @@ public class PlayerController : MonoBehaviour
     PlayerInputState playerInputState;
     CollisionState playerCollisionState;
 
+    bool playerFlippedX;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -306,6 +313,7 @@ public class PlayerController : MonoBehaviour
         playerAcceleration = new Vector2();
         playerCollisionState = new CollisionState();
         playerInputState = new PlayerInputState();
+        playerFlippedX = false;
     }
 
     // Update is called once per frame
@@ -323,6 +331,9 @@ public class PlayerController : MonoBehaviour
 
         // Process Player State Update:  Updates the playerVelocity / playerAcceleration / playerState variables
         ProcessPlayerStateUpdate();
+
+        // Update Player Animators
+        SetPlayerStateAnimation();
 
         // Update some of our diagnostics
         this.CollisionCeiling = this.playerCollisionState.CollisionCeiling.IsSet();
@@ -347,6 +358,28 @@ public class PlayerController : MonoBehaviour
 
     private void ProcessPlayerStateUpdate()
     {
+        // Design:  The states of motion should all follow a very clear / concise state machine
+        //          implementation. This will help to avoid fidgeting with issues that arise from
+        //          complexities of the rendering and 2D physics.
+        //
+        //          There will be Process[State] methods in the following switch statement. Each
+        //          Process[State] method should only detail its own state manipulation - apart
+        //          from any other coupled state. For example:  ProcessRunning sets ~Running
+        //          to player state; but does not affect the animators (other than left-right flip
+        //          local transform)
+        //
+        //          The motion for some of the player's animation states has a 2-frame "Start" 
+        //          sequence. So, the Start (state) has been separated to a separate logic sequence
+        //          which will accompany user inputs. The states should also separate X from Y inputs
+        //          to decouple any of the complexities from state changing.
+        //
+        // Procedure:
+        //
+        // 0) Capture Collision / Input data for the frame (should have already been completed)
+        // 1) Process Current State
+        // 2) Set Current State Animation (key frames)
+        //
+
         // PLAYER STATE (Can safely process X-Y dimensions separately)
         switch (this.playerState)
         {
@@ -422,6 +455,62 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    private void SetPlayerStateAnimation()
+    {
+        // Enable Proper Sprite Renderers
+        switch (this.playerState)
+        {
+            // All Other States
+            case PlayerState.Running:
+            case PlayerState.JumpStart:
+            case PlayerState.Jumping:
+            {
+                // Be careful to set this once (not every frame)
+                if (!this.PlayerSpriteRendererTop.enabled)
+                {
+                    this.PlayerSpriteRendererTop.enabled = true;
+                    this.PlayerSpriteRendererBottom.enabled = true;
+                    this.PlayerSpriteRendererIdle.enabled = false;
+                }
+            }
+            break;
+
+            // Idle
+            case PlayerState.Idle:
+            default:
+
+                // Be careful to set this once (not every frame)
+                if (this.PlayerSpriteRendererTop.enabled)
+                {
+                    this.PlayerSpriteRendererTop.enabled = false;
+                    this.PlayerSpriteRendererBottom.enabled = false;
+                    this.PlayerSpriteRendererIdle.enabled = true;
+                }
+                break;
+        }
+
+        // Change State
+        switch (this.playerState)
+        {
+            case PlayerState.Running | PlayerState.Jumping:
+                break;
+            case PlayerState.Running | PlayerState.JumpStart:
+                break;
+            case PlayerState.Running:
+                //this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                //this.PlayerAnimatorBottom.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                break;
+            case PlayerState.JumpStart:
+                break;
+            case PlayerState.Jumping:
+                break;
+            case PlayerState.Idle:
+                break;
+            default:
+                break;
+        }
+    }
+
     // Movement in Y-Direction Only
     private void ProcessJumpStart()
     {
@@ -483,7 +572,9 @@ public class PlayerController : MonoBehaviour
         // -> Left
         if (this.playerInputState.MoveLeftInput.IsSet())
         {
-            // TODO: Flip Animation X
+            // Flip Animation X
+            if (!this.playerFlippedX)
+                FlipSpritesX();
 
             // Moving Right:  Decelerate
             if (playerVelocity.x > 0)
@@ -501,7 +592,9 @@ public class PlayerController : MonoBehaviour
         // -> Right
         else if (this.playerInputState.MoveRightInput.IsSet())
         {
-            // TODO: Flip Animation X
+            // Un-Flip Animation X
+            if (this.playerFlippedX)
+                FlipSpritesX();
 
             // Moving Left:  Decelerate
             if (playerVelocity.x < 0)
@@ -539,5 +632,43 @@ public class PlayerController : MonoBehaviour
             else
                 this.playerState &= ~PlayerState.Running;               // Remove Running State
         }
+    }
+
+    private void FlipSpritesX()
+    {
+        // FLIP-X
+        this.playerFlippedX = !this.playerFlippedX;
+
+        // There is a convenience setting called "FlipX"; but we need to learn how to tweak 
+        // these "local" transforms. They should all be relative to Player
+        //
+        var localScaleTop = this.PlayerSpriteRendererTop.transform.localScale;
+        var localPositionTop = this.PlayerSpriteRendererTop.transform.localPosition;
+        var localScaleBottom = this.PlayerSpriteRendererBottom.transform.localScale;
+
+        // TOP:  Flip Horizontally; and add necessary offset for sprite size mismatch
+        localScaleTop.x *= -1;
+
+        // Grid / Sprite Sizes / Relative Scales
+        // -------------------------------------
+        //
+        // Grid Cell Size:             16px
+        // Difference in Top / Bottom: 36 - 25 = 11px
+        // Bottom Scale:               2.25
+        // Top Scale:                  1.5625
+        //
+        // Local Cell Size = 25px
+        // 
+        // So, the local offset is 5px = 1 / 5 (th) of a cell = 0.2;
+        //
+        localPositionTop.x += this.playerFlippedX ? -0.2f : 0.2f;
+
+        this.PlayerSpriteRendererTop.transform.localScale = localScaleTop;
+        this.PlayerSpriteRendererTop.transform.localPosition = localPositionTop;
+
+        // BOTTOM: Flip Horizontally
+        localScaleBottom.x *= -1;
+
+        this.PlayerSpriteRendererBottom.transform.localScale = localScaleBottom;
     }
 }

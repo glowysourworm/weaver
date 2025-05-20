@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1107 &-845364057236984085
+--- !u!1107 &-7202844979811387674
 AnimatorStateMachine:
   serializedVersion: 6
   m_ObjectHideFlags: 1
@@ -10,8 +10,8 @@ AnimatorStateMachine:
   m_Name: Base Layer
   m_ChildStates:
   - serializedVersion: 1
-    m_State: {fileID: 8827117422327916845}
-    m_Position: {x: 300, y: 110, z: 0}
+    m_State: {fileID: 2227956069653614046}
+    m_Position: {x: 280, y: 110, z: 0}
   m_ChildStateMachines: []
   m_AnyStateTransitions: []
   m_EntryTransitions: []
@@ -21,14 +21,14 @@ AnimatorStateMachine:
   m_EntryPosition: {x: 50, y: 120, z: 0}
   m_ExitPosition: {x: 800, y: 120, z: 0}
   m_ParentStateMachinePosition: {x: 800, y: 20, z: 0}
-  m_DefaultState: {fileID: 8827117422327916845}
+  m_DefaultState: {fileID: 2227956069653614046}
 --- !u!91 &9100000
 AnimatorController:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: PlayerSpriteTop
+  m_Name: PlayerIdle
   serializedVersion: 5
   m_AnimatorParameters:
   - m_Name: TimeScale
@@ -40,7 +40,7 @@ AnimatorController:
   m_AnimatorLayers:
   - serializedVersion: 5
     m_Name: Base Layer
-    m_StateMachine: {fileID: -845364057236984085}
+    m_StateMachine: {fileID: -7202844979811387674}
     m_Mask: {fileID: 0}
     m_Motions: []
     m_Behaviours: []
@@ -50,14 +50,14 @@ AnimatorController:
     m_IKPass: 0
     m_SyncedLayerAffectsTiming: 0
     m_Controller: {fileID: 9100000}
---- !u!1102 &8827117422327916845
+--- !u!1102 &2227956069653614046
 AnimatorState:
   serializedVersion: 6
   m_ObjectHideFlags: 1
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: player-run-top
+  m_Name: player-idle
   m_Speed: 1
   m_CycleOffset: 0
   m_Transitions: []
@@ -70,7 +70,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: 7400000, guid: 40169ccb46ee17940ab66d25fd823f52, type: 2}
+  m_Motion: {fileID: 7400000, guid: c191af351969a0a4a81e2d0876e40915, type: 2}
   m_Tag: 
   m_SpeedParameter: TimeScale
   m_MirrorParameter: 
