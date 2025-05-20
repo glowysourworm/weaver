@@ -309,7 +309,7 @@ public class PlayerController : MonoBehaviour
     }
 
     // Update is called once per frame
-    void Update()
+    void FixedUpdate()
     {
         // Setup Player Velocity (use current "memory" if it is managed for this Vector2)
         //
