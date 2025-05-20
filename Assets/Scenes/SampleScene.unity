@@ -11129,6 +11129,7 @@ GameObject:
   - component: {fileID: 633176211}
   - component: {fileID: 633176213}
   - component: {fileID: 633176214}
+  - component: {fileID: 633176215}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -11207,6 +11208,7 @@ MonoBehaviour:
   JumpInputTime: 0.1
   MaxRunVelocity: 20
   MaxFallVelocity: 30
+  MaxJumpVelocity: 20
   Gravity: 10
   CollisionGround: 0
   CollisionCeiling: 0
@@ -11311,6 +11313,28 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 1.4974225, y: 3.2579706}
   m_EdgeRadius: 0.07
+--- !u!95 &633176215
+Animator:
+  serializedVersion: 7
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 633176209}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 0}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_AnimatePhysics: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &733064881
 GameObject:
   m_ObjectHideFlags: 0
@@ -13179,7 +13203,7 @@ SpriteRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1468501030}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 0
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1
@@ -23167,7 +23191,7 @@ SpriteRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1892362223}
-  m_Enabled: 1
+  m_Enabled: 0
   m_CastShadows: 0
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1

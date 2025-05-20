@@ -203,7 +203,7 @@ public class ReadOnlyDrawer : PropertyDrawer
             case SerializedPropertyType.Enum:
 
                 // OUR SPECIAL FLAGS CASE
-                if (property.type == "PlayerState")
+                if (property.name == "State")
                 {
                     if (property.enumValueFlag == 0)
                         valueStr = "Idle";
@@ -261,6 +261,7 @@ public class PlayerController : MonoBehaviour
 
     public float MaxRunVelocity = 1f;
     public float MaxFallVelocity = 1f;
+    public float MaxJumpVelocity = 1f;
 
     // These [ReadOnly] Attributes are diagnostics that will show up in the
     // Unity drawer for this controller. These can probably be turned into
@@ -457,10 +458,19 @@ public class PlayerController : MonoBehaviour
 
     private void SetPlayerStateAnimation()
     {
+        // Calculate jump offset (if jumping, this will be used)
+        var jumpOffset = this.playerVelocity.y > 0f ? 0.5f - (this.playerVelocity.y / this.MaxJumpVelocity / 2f) :
+                                                      0.5f + (this.playerVelocity.y / this.MaxFallVelocity / 2f);
+
+        // NOTE:  The "enabled" setting is the checkbox next to the component in the
+        //        UI. This will be enabled / disabled for sprite renderers
+
         // Enable Proper Sprite Renderers
         switch (this.playerState)
         {
             // All Other States
+            case PlayerState.Running | PlayerState.Jumping:
+            case PlayerState.Running | PlayerState.JumpStart:
             case PlayerState.Running:
             case PlayerState.JumpStart:
             case PlayerState.Jumping:
@@ -493,22 +503,64 @@ public class PlayerController : MonoBehaviour
         switch (this.playerState)
         {
             case PlayerState.Running | PlayerState.Jumping:
+
+                // Play Animation
+                this.PlayerAnimatorTop.Play("player-run-top-normal");
+                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
+
+                // Set Frame (using time scale)
+                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
+
                 break;
             case PlayerState.Running | PlayerState.JumpStart:
+
+                // Play Animation
+                this.PlayerAnimatorTop.Play("player-run-top-normal");
+                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
+
+                // Set Frame (using time scale)
+                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
+
                 break;
             case PlayerState.Running:
-                //this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
-                //this.PlayerAnimatorBottom.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+
+                // Play Animation
+                this.PlayerAnimatorTop.Play("player-run-top-normal");
+                this.PlayerAnimatorBottom.Play("player-run-bottom");
+
+                // Set Frame (using time scale)
+                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                this.PlayerAnimatorBottom.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
                 break;
             case PlayerState.JumpStart:
+
+                // Play Animation
+                this.PlayerAnimatorTop.Play("player-run-top-normal");
+                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
+
+                // Set Frame (using time scale)
+                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
+
                 break;
             case PlayerState.Jumping:
+
+                // Play Animation
+                this.PlayerAnimatorTop.Play("player-run-top-normal");
+                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
+
+                // Set Frame (using time scale)
+                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
                 break;
             case PlayerState.Idle:
                 break;
             default:
                 break;
         }
+
     }
 
     // Movement in Y-Direction Only
@@ -525,7 +577,8 @@ public class PlayerController : MonoBehaviour
         if (this.playerInputState.JumpInput.IsSet() &&
             this.playerInputState.JumpInput.GetAccumulator() < this.JumpInputTime)
         {
-            playerVelocity.y = (this.JumpAcceleration * Time.deltaTime * accelerationFrameScale);
+            // FIX JUMP ACCELERATION (Needs capture also...)
+            playerVelocity.y = this.MaxJumpVelocity;
             //playerVelocity.y += (this.JumpAcceleration * Time.deltaTime * accelerationFrameScale);
         }
 
@@ -670,5 +723,8 @@ public class PlayerController : MonoBehaviour
         localScaleBottom.x *= -1;
 
         this.PlayerSpriteRendererBottom.transform.localScale = localScaleBottom;
+
+        // IDLE: Flip Horizontally
+        this.PlayerSpriteRendererIdle.flipX = this.playerFlippedX;
     }
 }
