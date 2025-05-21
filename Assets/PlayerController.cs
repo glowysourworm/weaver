@@ -7,14 +7,17 @@ using UnityEngine;
 [Flags]
 public enum PlayerState
 {
-    Idle = 0,               // Assumed to be mutually exclusive to Running / Jumping
-    Running = 1,            // Can combine Running / Jumping (for motion)
+    Idle = 0,                       // Assumed to be mutually exclusive to Running / Jumping
+    Running = 1,                    // Can combine Running / Jumping (for motion)
     JumpStart = 2,
-    Jumping = 4             // Animations are handled during these states based on motion
+    JumpingNormal = 4,              // Animations are handled during these states based on motion
+    JumpingSpin = 8,
+    Morphed = 16
 }
 
 public struct InputDetector
 {
+    bool isFirstInput;      // Detects a single-frame first input before accumulation
     bool input;
     float inputOnTime;
     float accumulator;
@@ -23,7 +26,7 @@ public struct InputDetector
     /// Sets current time; and returns true if the current time represents a new
     /// input capture for the detector.
     /// </summary>
-    public bool Set(bool nextInput)
+    public void Set(bool nextInput)
     {
         // End Capture
         if (!nextInput)
@@ -39,6 +42,7 @@ public struct InputDetector
             {
                 inputOnTime = accumulator;
                 accumulator = 0;
+                isFirstInput = false;
 
                 input = nextInput;
             }
@@ -51,15 +55,16 @@ public struct InputDetector
             if (!input)
             {
                 input = nextInput;
-                return true;            // Return "NEW CAPTURE"
+                isFirstInput = true;    // NEW CAPTURE
             }
 
             // Continue
             else
+            {
                 accumulator += Time.deltaTime;
+                isFirstInput = false;
+            }
         }
-
-        return false;
     }
 
     /// <summary>
@@ -68,6 +73,14 @@ public struct InputDetector
     public bool IsSet()
     {
         return input;
+    }
+
+    /// <summary>
+    /// Returns true for one frame on first signal
+    /// </summary>
+    public bool IsFirst()
+    {
+        return isFirstInput;
     }
 
     /// <summary>
@@ -214,8 +227,11 @@ public class ReadOnlyDrawer : PropertyDrawer
                         if (((PlayerState)property.enumValueFlag & PlayerState.JumpStart) != 0)
                             valueStr += string.IsNullOrEmpty(valueStr) ? "JumpStart" : " | JumpStart";
 
-                        if (((PlayerState)property.enumValueFlag & PlayerState.Jumping) != 0)
-                            valueStr += string.IsNullOrEmpty(valueStr) ? "Jumping" : " | Jumping";
+                        if (((PlayerState)property.enumValueFlag & PlayerState.JumpingNormal) != 0)
+                            valueStr += string.IsNullOrEmpty(valueStr) ? "JumpingNormal" : " | JumpingNormal";
+
+                        if (((PlayerState)property.enumValueFlag & PlayerState.JumpingSpin) != 0)
+                            valueStr += string.IsNullOrEmpty(valueStr) ? "JumpingSpin" : " | JumpingSpin";
                     }
                 }
                 else
@@ -383,13 +399,23 @@ public class PlayerController : MonoBehaviour
         // 2) Set Current State Animation (key frames)
         //
 
+        var jumping = (this.playerState & PlayerState.JumpingSpin) != 0 ||
+                      (this.playerState & PlayerState.JumpingNormal) != 0;
+
         // PLAYER STATE (Can safely process X-Y dimensions separately)
         switch (this.playerState)
         {
-            case PlayerState.Running | PlayerState.Jumping:
+            case PlayerState.Running | PlayerState.JumpingNormal:
             {
                 ProcessRunning();
-                ProcessJumping();
+                ProcessJumpingNormal();
+            }
+            break;
+
+            case PlayerState.Running | PlayerState.JumpingSpin:
+            {
+                ProcessRunning();
+                ProcessJumpingSpin();
             }
             break;
 
@@ -404,9 +430,10 @@ public class PlayerController : MonoBehaviour
             {
                 ProcessRunning();
 
-                // -> JumpStart (~Jumping, Jump Input Set, On Ground)
-                if ((this.playerState & PlayerState.Jumping) == 0 &&
+                // -> JumpStart (~JumpingNormal, ~JumpingSpin, Jump Input Set, Jump Input (1st), On Ground)
+                if (!jumping &&
                     this.playerInputState.JumpInput.IsSet() &&
+                    this.playerInputState.JumpInput.IsFirst() &&
                     this.playerCollisionState.CollisionGround.IsSet())
                     this.playerState |= PlayerState.JumpStart;
             }
@@ -421,9 +448,10 @@ public class PlayerController : MonoBehaviour
                     this.playerState |= PlayerState.Running;
             }
             break;
-            case PlayerState.Jumping:
+
+            case PlayerState.JumpingNormal:
             {
-                ProcessJumping();
+                ProcessJumpingNormal();
 
                 // -> Left / Right
                 if (this.playerInputState.MoveLeftInput.IsSet() ||
@@ -432,11 +460,29 @@ public class PlayerController : MonoBehaviour
             }
             break;
 
+            case PlayerState.JumpingSpin:
+            {
+                ProcessJumpingSpin();
+
+                // -> Left / Right
+                if (this.playerInputState.MoveLeftInput.IsSet() ||
+                    this.playerInputState.MoveRightInput.IsSet())
+                    this.playerState |= PlayerState.Running;
+            }
+            break;
+
+            case PlayerState.Morphed:
+            {
+
+            }
+            break;
+
             case PlayerState.Idle:
             {
-                // -> JumpStart (~Jumping, Jump Input Set, On Ground)
-                if ((this.playerState & PlayerState.Jumping) == 0 &&
+                // -> JumpStart (Not Jumping, Jump Input Set, Jump Input (1st), On Ground)
+                if (!jumping &&
                     this.playerInputState.JumpInput.IsSet() &&
+                    this.playerInputState.JumpInput.IsFirst() &&
                     this.playerCollisionState.CollisionGround.IsSet())
                     this.playerState |= PlayerState.JumpStart;
 
@@ -471,16 +517,31 @@ public class PlayerController : MonoBehaviour
         switch (this.playerState)
         {
             // Jumping Takes Precedence
-            case PlayerState.Running | PlayerState.Jumping:
+            case PlayerState.Running | PlayerState.JumpingNormal:
             case PlayerState.Running | PlayerState.JumpStart:
             case PlayerState.JumpStart:
-            case PlayerState.Jumping:
+            case PlayerState.JumpingNormal:
             {
                 // Be careful to set this once (not every frame)
                 if (!this.PlayerSpriteRendererJumpNormal.enabled)
                 {
                     this.PlayerSpriteRendererJumpNormal.enabled = true;
                     this.PlayerSpriteRendererJumpSpin.enabled = false;
+                    this.PlayerSpriteRendererIdle.enabled = false;
+                    this.PlayerSpriteRendererRunning.enabled = false;
+                    this.PlayerSpriteRendererMorph.enabled = false;
+                }
+            }
+            break;
+
+            case PlayerState.Running | PlayerState.JumpingSpin:
+            case PlayerState.JumpingSpin:
+            {
+                // Be careful to set this once (not every frame)
+                if (!this.PlayerSpriteRendererJumpSpin.enabled)
+                {
+                    this.PlayerSpriteRendererJumpNormal.enabled = false;
+                    this.PlayerSpriteRendererJumpSpin.enabled = true;
                     this.PlayerSpriteRendererIdle.enabled = false;
                     this.PlayerSpriteRendererRunning.enabled = false;
                     this.PlayerSpriteRendererMorph.enabled = false;
@@ -502,6 +563,10 @@ public class PlayerController : MonoBehaviour
                 }
                 break;
 
+            // Morphed
+            case PlayerState.Morphed:
+                break;
+
             // Idle
             case PlayerState.Idle:
             default:
@@ -521,38 +586,24 @@ public class PlayerController : MonoBehaviour
         // Change State
         switch (this.playerState)
         {
-            case PlayerState.Running | PlayerState.Jumping:
-
-                // Set Frame (using time scale)
-                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
-                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
-
-                break;
+            case PlayerState.Running | PlayerState.JumpingNormal:
+            case PlayerState.Running | PlayerState.JumpingSpin:
             case PlayerState.Running | PlayerState.JumpStart:
+            case PlayerState.JumpStart:
+            case PlayerState.JumpingNormal:
+            case PlayerState.JumpingSpin:
 
                 // Set Frame (using time scale)
                 this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
-                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
-
+                //this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);  Can't scale these...
                 break;
             case PlayerState.Running:
 
                 // Set Frame (using time scale)
                 this.PlayerAnimatorRunning.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
                 break;
-            case PlayerState.JumpStart:
 
-                // Set Frame (using time scale)
-                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
-                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
-
-                break;
-            case PlayerState.Jumping:
-
-                // Set Frame (using time scale)
-                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
-                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
-                break;
+            case PlayerState.Morphed:
             case PlayerState.Idle:
                 break;
             default:
@@ -566,9 +617,11 @@ public class PlayerController : MonoBehaviour
     {
         // Jump Envelope:
         //
-        // 0) On Ground:       Capture jump input
+        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
         // 1) Start of Jump:   Capture jump input time (for brief configured delta)
         // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
+        //                     Also, the next jumping state depends on the user input at this point. Directional
+        //                     input will trigger a spin jump.
         //
 
         // Start of Jump
@@ -586,15 +639,19 @@ public class PlayerController : MonoBehaviour
             // ~JumpStart (remove start state)
             this.playerState &= ~PlayerState.JumpStart;
 
-            // -> Jumping
-            this.playerState |= PlayerState.Jumping;
+            // -> Jumping (Spin, or Normal)
+            if (this.playerInputState.MoveLeftInput.IsSet() ||
+                this.playerInputState.MoveRightInput.IsSet())
+                this.playerState |= PlayerState.JumpingSpin;
+            else
+                this.playerState |= PlayerState.JumpingNormal;
         }
     }
-    private void ProcessJumping()
+    private void ProcessJumpingNormal()
     {
         // Jump Envelope:
         //
-        // 0) On Ground:       Capture jump input
+        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
         // 1) Start of Jump:   Capture jump input time (for brief configured delta)
         // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
         //
@@ -607,7 +664,27 @@ public class PlayerController : MonoBehaviour
 
         // -> ~Jumping (on the ground)
         else
-            this.playerState &= ~PlayerState.Jumping;
+            this.playerState &= ~PlayerState.JumpingNormal;
+    }
+
+    private void ProcessJumpingSpin()
+    {
+        // Jump Envelope:
+        //
+        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
+        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
+        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
+        //
+
+        // Jumping (in the air)
+        if (!this.playerCollisionState.CollisionGround.IsSet())
+        {
+            // Nothing to do
+        }
+
+        // -> ~Jumping (on the ground)
+        else
+            this.playerState &= ~PlayerState.JumpingSpin;
     }
 
     // Movement in X-Direction Only
@@ -694,6 +771,7 @@ public class PlayerController : MonoBehaviour
         this.PlayerSpriteRendererJumpNormal.flipX = this.playerFlippedX;
         this.PlayerSpriteRendererJumpSpin.flipX = this.playerFlippedX;
         this.PlayerSpriteRendererRunning.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererMorph.flipX = this.playerFlippedX;
 
         // TRYING NOT TO FIDGET WITH SPRITES
 
