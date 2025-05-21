@@ -1,0 +1,15 @@
+Samus Rendering:  16px blocks, 2 X 3 (blocks) = 32px X 48px (IDLE)
+
+					SPRITE					SCALE (Multiplier) 		UNIT SIZE				UNIT OFFSET (Y)
+																							(1/2 (H - h))
+IDLE:  				26px X 43px  			1.230769 X 1.116279		2 X 3
+
+JUMP NORMAL:		25.111px X 49px			1.274341 X 0.979592		2 X 3
+
+	TOP:			25.111px X 20px									2 X 1.2244898			0.8877551
+	BOTTOM:			21px X 29px										1.68 X 1.7755102		-0.6122449
+	
+RUNNING NORMAL:		36px X 56px				0.888888 X 0.857143		2 X 3
+
+	TOP:			25px X 27px										1.3888888 X 1.44642857	0.776785715
+	BOTTOM:			36px X 29px										2 X 1.5535714			-0.7232143

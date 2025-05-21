@@ -1,17 +1,15 @@
 using System;
 
 using UnityEditor;
-using UnityEditor.Rendering;
 
 using UnityEngine;
-using UnityEngine.Rendering;
 
 [Flags]
 public enum PlayerState
 {
     Idle = 0,               // Assumed to be mutually exclusive to Running / Jumping
     Running = 1,            // Can combine Running / Jumping (for motion)
-    JumpStart = 2,          
+    JumpStart = 2,
     Jumping = 4             // Animations are handled during these states based on motion
 }
 
@@ -52,7 +50,7 @@ public struct InputDetector
             // Start
             if (!input)
             {
-                input = nextInput;      
+                input = nextInput;
                 return true;            // Return "NEW CAPTURE"
             }
 
@@ -149,7 +147,7 @@ public class PlayerInputState
     {
         // Jump
         this.JumpInput.Set(Input.GetKeyDown(KeyCode.F) || Input.GetKey(KeyCode.F));
-        
+
         // Up
         this.MoveUpInput.Set(Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKey(KeyCode.UpArrow));
 
@@ -210,24 +208,24 @@ public class ReadOnlyDrawer : PropertyDrawer
 
                     else
                     {
-                        if (((PlayerState)(property.enumValueFlag) & PlayerState.Running) != 0)
+                        if (((PlayerState)property.enumValueFlag & PlayerState.Running) != 0)
                             valueStr += "Running";
 
-                        if (((PlayerState)(property.enumValueFlag) & PlayerState.JumpStart) != 0)
+                        if (((PlayerState)property.enumValueFlag & PlayerState.JumpStart) != 0)
                             valueStr += string.IsNullOrEmpty(valueStr) ? "JumpStart" : " | JumpStart";
 
-                        if (((PlayerState)(property.enumValueFlag) & PlayerState.Jumping) != 0)
+                        if (((PlayerState)property.enumValueFlag & PlayerState.Jumping) != 0)
                             valueStr += string.IsNullOrEmpty(valueStr) ? "Jumping" : " | Jumping";
                     }
                 }
                 else
                 {
                     // Caught one error for this one; but not every time... (hmm.)
-                    if (property.enumValueIndex >= 0 && 
+                    if (property.enumValueIndex >= 0 &&
                         property.enumValueIndex < property.enumDisplayNames.Length)
                         valueStr = property.enumDisplayNames[property.enumValueIndex];
                 }
-                    
+
 
                 break;
             default:
@@ -247,12 +245,16 @@ public class PlayerController : MonoBehaviour
     public PlayerState MovementState = PlayerState.Idle;
 
     public Animator PlayerAnimatorIdle;
-    public Animator PlayerAnimatorTop;
-    public Animator PlayerAnimatorBottom;
+    public Animator PlayerAnimatorRunning;
+    public Animator PlayerAnimatorJumpNormal;
+    public Animator PlayerAnimatorJumpSpin;
+    public Animator PlayerAnimatorMorph;
 
-    public SpriteRenderer PlayerSpriteRendererIdle;    
-    public SpriteRenderer PlayerSpriteRendererTop;          
-    public SpriteRenderer PlayerSpriteRendererBottom;
+    public SpriteRenderer PlayerSpriteRendererRunning;
+    public SpriteRenderer PlayerSpriteRendererIdle;
+    public SpriteRenderer PlayerSpriteRendererJumpNormal;
+    public SpriteRenderer PlayerSpriteRendererJumpSpin;
+    public SpriteRenderer PlayerSpriteRendererMorph;
 
     public float RunAcceleration = 1f;
     public float RunDeceleration = 1f;
@@ -354,7 +356,7 @@ public class PlayerController : MonoBehaviour
 
         // Finally, Set Player Rigid Body Update (up to owners of the struct to say how memory is managed)
         //
-        this.Player.linearVelocity = playerVelocity; 
+        this.Player.linearVelocity = playerVelocity;
     }
 
     private void ProcessPlayerStateUpdate()
@@ -468,33 +470,50 @@ public class PlayerController : MonoBehaviour
         // Enable Proper Sprite Renderers
         switch (this.playerState)
         {
-            // All Other States
+            // Jumping Takes Precedence
             case PlayerState.Running | PlayerState.Jumping:
             case PlayerState.Running | PlayerState.JumpStart:
-            case PlayerState.Running:
             case PlayerState.JumpStart:
             case PlayerState.Jumping:
             {
                 // Be careful to set this once (not every frame)
-                if (!this.PlayerSpriteRendererTop.enabled)
+                if (!this.PlayerSpriteRendererJumpNormal.enabled)
                 {
-                    this.PlayerSpriteRendererTop.enabled = true;
-                    this.PlayerSpriteRendererBottom.enabled = true;
+                    this.PlayerSpriteRendererJumpNormal.enabled = true;
+                    this.PlayerSpriteRendererJumpSpin.enabled = false;
                     this.PlayerSpriteRendererIdle.enabled = false;
+                    this.PlayerSpriteRendererRunning.enabled = false;
+                    this.PlayerSpriteRendererMorph.enabled = false;
                 }
             }
             break;
+
+            // Running
+            case PlayerState.Running:
+
+                // Be careful to set this once (not every frame)
+                if (!this.PlayerSpriteRendererRunning.enabled)
+                {
+                    this.PlayerSpriteRendererJumpNormal.enabled = false;
+                    this.PlayerSpriteRendererJumpSpin.enabled = false;
+                    this.PlayerSpriteRendererIdle.enabled = false;
+                    this.PlayerSpriteRendererRunning.enabled = true;
+                    this.PlayerSpriteRendererMorph.enabled = false;
+                }
+                break;
 
             // Idle
             case PlayerState.Idle:
             default:
 
                 // Be careful to set this once (not every frame)
-                if (this.PlayerSpriteRendererTop.enabled)
+                if (!this.PlayerSpriteRendererIdle.enabled)
                 {
-                    this.PlayerSpriteRendererTop.enabled = false;
-                    this.PlayerSpriteRendererBottom.enabled = false;
+                    this.PlayerSpriteRendererJumpNormal.enabled = false;
+                    this.PlayerSpriteRendererJumpSpin.enabled = false;
                     this.PlayerSpriteRendererIdle.enabled = true;
+                    this.PlayerSpriteRendererRunning.enabled = false;
+                    this.PlayerSpriteRendererMorph.enabled = false;
                 }
                 break;
         }
@@ -504,56 +523,35 @@ public class PlayerController : MonoBehaviour
         {
             case PlayerState.Running | PlayerState.Jumping:
 
-                // Play Animation
-                this.PlayerAnimatorTop.Play("player-run-top-normal");
-                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
-
                 // Set Frame (using time scale)
-                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
-                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
 
                 break;
             case PlayerState.Running | PlayerState.JumpStart:
 
-                // Play Animation
-                this.PlayerAnimatorTop.Play("player-run-top-normal");
-                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
-
                 // Set Frame (using time scale)
-                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
-                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
 
                 break;
             case PlayerState.Running:
 
-                // Play Animation
-                this.PlayerAnimatorTop.Play("player-run-top-normal");
-                this.PlayerAnimatorBottom.Play("player-run-bottom");
-
                 // Set Frame (using time scale)
-                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
-                this.PlayerAnimatorBottom.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
+                this.PlayerAnimatorRunning.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
                 break;
             case PlayerState.JumpStart:
 
-                // Play Animation
-                this.PlayerAnimatorTop.Play("player-run-top-normal");
-                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
-
                 // Set Frame (using time scale)
-                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
-                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
 
                 break;
             case PlayerState.Jumping:
 
-                // Play Animation
-                this.PlayerAnimatorTop.Play("player-run-top-normal");
-                this.PlayerAnimatorBottom.Play("player-jump-normal-bottom");
-
                 // Set Frame (using time scale)
-                this.PlayerAnimatorTop.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
-                this.PlayerAnimatorBottom.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
+                this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);
                 break;
             case PlayerState.Idle:
                 break;
@@ -631,11 +629,11 @@ public class PlayerController : MonoBehaviour
 
             // Moving Right:  Decelerate
             if (playerVelocity.x > 0)
-                playerVelocity.x -= (this.RunDeceleration * Time.deltaTime * accelerationFrameScale);
+                playerVelocity.x -= this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
 
             // Moving Left / Idle: Accelerate
             else
-                playerVelocity.x -= (this.RunAcceleration * Time.deltaTime * accelerationFrameScale);
+                playerVelocity.x -= this.RunAcceleration * Time.deltaTime * accelerationFrameScale;
 
             // Max Velocity (Clamp)
             if (Math.Abs(playerVelocity.x) > this.MaxRunVelocity)
@@ -651,11 +649,11 @@ public class PlayerController : MonoBehaviour
 
             // Moving Left:  Decelerate
             if (playerVelocity.x < 0)
-                playerVelocity.x += (this.RunDeceleration * Time.deltaTime * accelerationFrameScale);
+                playerVelocity.x += this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
 
             // Moving Right / Idle: Accelerate
             else
-                playerVelocity.x += (this.RunAcceleration * Time.deltaTime * accelerationFrameScale);
+                playerVelocity.x += this.RunAcceleration * Time.deltaTime * accelerationFrameScale;
 
             // Max Velocity (Clamp)
             if (playerVelocity.x > this.MaxRunVelocity)
@@ -667,7 +665,7 @@ public class PlayerController : MonoBehaviour
             // Decelerate Until Idle (moving left)
             if (playerVelocity.x < 0)
             {
-                playerVelocity.x += (this.RunDeceleration * Time.deltaTime * accelerationFrameScale);
+                playerVelocity.x += this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
 
                 // Clamp at zero
                 playerVelocity.x = Math.Min(playerVelocity.x, 0);
@@ -675,7 +673,7 @@ public class PlayerController : MonoBehaviour
 
             else if (playerVelocity.x > 0)
             {
-                playerVelocity.x -= (this.RunDeceleration * Time.deltaTime * accelerationFrameScale);
+                playerVelocity.x -= this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
 
                 // Clamp at zero
                 playerVelocity.x = Math.Max(playerVelocity.x, 0);
@@ -692,15 +690,22 @@ public class PlayerController : MonoBehaviour
         // FLIP-X
         this.playerFlippedX = !this.playerFlippedX;
 
+        this.PlayerSpriteRendererIdle.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererJumpNormal.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererJumpSpin.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererRunning.flipX = this.playerFlippedX;
+
+        // TRYING NOT TO FIDGET WITH SPRITES
+
         // There is a convenience setting called "FlipX"; but we need to learn how to tweak 
         // these "local" transforms. They should all be relative to Player
         //
-        var localScaleTop = this.PlayerSpriteRendererTop.transform.localScale;
-        var localPositionTop = this.PlayerSpriteRendererTop.transform.localPosition;
-        var localScaleBottom = this.PlayerSpriteRendererBottom.transform.localScale;
+        //var localScaleTop = this.PlayerSpriteRendererTop.transform.localScale;
+        //var localPositionTop = this.PlayerSpriteRendererTop.transform.localPosition;
+        //var localScaleBottom = this.PlayerSpriteRendererBottom.transform.localScale;
 
         // TOP:  Flip Horizontally; and add necessary offset for sprite size mismatch
-        localScaleTop.x *= -1;
+        //localScaleTop.x *= -1;
 
         // Grid / Sprite Sizes / Relative Scales
         // -------------------------------------
@@ -714,17 +719,17 @@ public class PlayerController : MonoBehaviour
         // 
         // So, the local offset is 5px = 1 / 5 (th) of a cell = 0.2;
         //
-        localPositionTop.x += this.playerFlippedX ? -0.2f : 0.2f;
+        //localPositionTop.x += this.playerFlippedX ? -0.2f : 0.2f;
 
-        this.PlayerSpriteRendererTop.transform.localScale = localScaleTop;
-        this.PlayerSpriteRendererTop.transform.localPosition = localPositionTop;
+        //this.PlayerSpriteRendererTop.transform.localScale = localScaleTop;
+        //this.PlayerSpriteRendererTop.transform.localPosition = localPositionTop;
 
         // BOTTOM: Flip Horizontally
-        localScaleBottom.x *= -1;
+        //localScaleBottom.x *= -1;
 
-        this.PlayerSpriteRendererBottom.transform.localScale = localScaleBottom;
+        //this.PlayerSpriteRendererBottom.transform.localScale = localScaleBottom;
 
         // IDLE: Flip Horizontally
-        this.PlayerSpriteRendererIdle.flipX = this.playerFlippedX;
+        //this.PlayerSpriteRendererIdle.flipX = this.playerFlippedX;
     }
 }

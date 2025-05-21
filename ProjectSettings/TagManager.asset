@@ -16,8 +16,8 @@ TagManager:
   - CollisionRight
   - CollisionGround
   - CollisionCeiling
-  - PlayerTopBottomSpriteLayer
-  - PlayerIdleSpriteLayer
+  - 
+  - 
   - 
   - 
   - 
