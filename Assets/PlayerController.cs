@@ -1,264 +1,12 @@
 using System;
 
-using UnityEditor;
+using Assets;
 
 using UnityEngine;
-
-[Flags]
-public enum PlayerState
-{
-    Idle = 0,                       // Assumed to be mutually exclusive to Running / Jumping
-    Running = 1,                    // Can combine Running / Jumping (for motion)
-    JumpStart = 2,
-    JumpingNormal = 4,              // Animations are handled during these states based on motion
-    JumpingSpin = 8,
-    Morphed = 16
-}
-
-public struct InputDetector
-{
-    bool isFirstInput;      // Detects a single-frame first input before accumulation
-    bool input;
-    float inputOnTime;
-    float accumulator;
-
-    /// <summary>
-    /// Sets current time; and returns true if the current time represents a new
-    /// input capture for the detector.
-    /// </summary>
-    public void Set(bool nextInput)
-    {
-        // End Capture
-        if (!nextInput)
-        {
-            // Never Started
-            if (!input)
-            {
-                // Nothing to do
-            }
-
-            // End
-            else
-            {
-                inputOnTime = accumulator;
-                accumulator = 0;
-                isFirstInput = false;
-
-                input = nextInput;
-            }
-        }
-
-        // Start / Continue Capture
-        else
-        {
-            // Start
-            if (!input)
-            {
-                input = nextInput;
-                isFirstInput = true;    // NEW CAPTURE
-            }
-
-            // Continue
-            else
-            {
-                accumulator += Time.deltaTime;
-                isFirstInput = false;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Returns true if the input is currently set
-    /// </summary>
-    public bool IsSet()
-    {
-        return input;
-    }
-
-    /// <summary>
-    /// Returns true for one frame on first signal
-    /// </summary>
-    public bool IsFirst()
-    {
-        return isFirstInput;
-    }
-
-    /// <summary>
-    /// Gets current capture result time (which holds its value after detector is unset)
-    /// </summary>
-    public float GetCaptureTime()
-    {
-        return inputOnTime;
-    }
-
-    /// <summary>
-    /// Gets accumulator for current capture
-    /// </summary>
-    /// <returns></returns>
-    public float GetAccumulator()
-    {
-        return accumulator;
-    }
-}
-
-public class CollisionState
-{
-    // MULTIPLE COLLISION DETECTORS CAUSING RIGID BODY TO FREEZE
-    //
-    // (Until we get acquainted with Unity2D, lets get rid of the extra "ALL" tilemap)
-    //
-
-    //public const string COLLISION_ALL = "CollisionAll";
-    public const string COLLISION_LEFT = "CollisionLeft";
-    public const string COLLISION_RIGHT = "CollisionRight";
-    public const string COLLISION_CEILING = "CollisionCeiling";
-    public const string COLLISION_GROUND = "CollisionGround";
-
-    //public InputDetector CollisionAll;
-    public InputDetector CollisionLeft;
-    public InputDetector CollisionRight;
-    public InputDetector CollisionCeiling;
-    public InputDetector CollisionGround;
-
-    public CollisionState()
-    {
-        //this.CollisionAll = new InputDetector();
-        this.CollisionLeft = new InputDetector();
-        this.CollisionRight = new InputDetector();
-        this.CollisionCeiling = new InputDetector();
-        this.CollisionGround = new InputDetector();
-    }
-
-    public void Capture(Rigidbody2D player)
-    {
-        //this.CollisionAll.Set(player.IsTouchingLayers(LayerMask.GetMask(COLLISION_ALL)));
-        this.CollisionLeft.Set(player.IsTouchingLayers(LayerMask.GetMask(COLLISION_LEFT)));
-        this.CollisionRight.Set(player.IsTouchingLayers(LayerMask.GetMask(COLLISION_RIGHT)));
-        this.CollisionGround.Set(player.IsTouchingLayers(LayerMask.GetMask(COLLISION_GROUND)));
-        this.CollisionCeiling.Set(player.IsTouchingLayers(LayerMask.GetMask(COLLISION_CEILING)));
-    }
-}
-
-public class PlayerInputState
-{
-    public InputDetector JumpInput;
-    public InputDetector MoveLeftInput;
-    public InputDetector MoveRightInput;
-    public InputDetector MoveUpInput;
-    public InputDetector MoveDownInput;
-
-    public PlayerInputState()
-    {
-        this.JumpInput = new InputDetector();
-        this.MoveLeftInput = new InputDetector();
-        this.MoveRightInput = new InputDetector();
-        this.MoveUpInput = new InputDetector();
-        this.MoveDownInput = new InputDetector();
-    }
-
-    public void Capture(Rigidbody2D player)
-    {
-        // Jump
-        this.JumpInput.Set(Input.GetKeyDown(KeyCode.F) || Input.GetKey(KeyCode.F));
-
-        // Up
-        this.MoveUpInput.Set(Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKey(KeyCode.UpArrow));
-
-        // Down
-        this.MoveDownInput.Set(Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKey(KeyCode.DownArrow));
-
-        // Left
-        this.MoveLeftInput.Set(Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKey(KeyCode.LeftArrow));
-
-        // Right
-        this.MoveRightInput.Set(Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKey(KeyCode.RightArrow));
-    }
-}
-
-public class ReadOnlyAttribute : PropertyAttribute
-{
-
-}
-
-[CustomPropertyDrawer(typeof(ReadOnlyAttribute))]
-public class ReadOnlyDrawer : PropertyDrawer
-{
-    public override float GetPropertyHeight(SerializedProperty property,
-                                            GUIContent label)
-    {
-        return EditorGUI.GetPropertyHeight(property, label, true);
-    }
-
-    public override void OnGUI(Rect position,
-                               SerializedProperty property,
-                               GUIContent label)
-    {
-        GUI.enabled = false;
-
-        string valueStr = "";
-
-        switch (property.propertyType)
-        {
-            case SerializedPropertyType.Integer:
-                valueStr = property.intValue.ToString();
-                break;
-            case SerializedPropertyType.Boolean:
-                valueStr = property.boolValue.ToString();
-                break;
-            case SerializedPropertyType.Float:
-                valueStr = property.floatValue.ToString("0.00000");
-                break;
-            case SerializedPropertyType.String:
-                valueStr = property.stringValue;
-                break;
-            case SerializedPropertyType.Enum:
-
-                // OUR SPECIAL FLAGS CASE
-                if (property.name == "State")
-                {
-                    if (property.enumValueFlag == 0)
-                        valueStr = "Idle";
-
-                    else
-                    {
-                        if (((PlayerState)property.enumValueFlag & PlayerState.Running) != 0)
-                            valueStr += "Running";
-
-                        if (((PlayerState)property.enumValueFlag & PlayerState.JumpStart) != 0)
-                            valueStr += string.IsNullOrEmpty(valueStr) ? "JumpStart" : " | JumpStart";
-
-                        if (((PlayerState)property.enumValueFlag & PlayerState.JumpingNormal) != 0)
-                            valueStr += string.IsNullOrEmpty(valueStr) ? "JumpingNormal" : " | JumpingNormal";
-
-                        if (((PlayerState)property.enumValueFlag & PlayerState.JumpingSpin) != 0)
-                            valueStr += string.IsNullOrEmpty(valueStr) ? "JumpingSpin" : " | JumpingSpin";
-                    }
-                }
-                else
-                {
-                    // Caught one error for this one; but not every time... (hmm.)
-                    if (property.enumValueIndex >= 0 &&
-                        property.enumValueIndex < property.enumDisplayNames.Length)
-                        valueStr = property.enumDisplayNames[property.enumValueIndex];
-                }
-
-
-                break;
-            default:
-                valueStr = "(not supported)";
-                break;
-        }
-
-        EditorGUI.LabelField(position, label.text, valueStr);
-
-        GUI.enabled = true;
-    }
-}
 
 public class PlayerController : MonoBehaviour
 {
     public Rigidbody2D Player;
-    public PlayerState MovementState = PlayerState.Idle;
 
     public Animator PlayerAnimatorIdle;
     public Animator PlayerAnimatorRunning;
@@ -274,6 +22,7 @@ public class PlayerController : MonoBehaviour
 
     public float RunAcceleration = 1f;
     public float RunDeceleration = 1f;
+    public float RunAutoDeceleration = 1f;              // Happens when player lets go of input
     public float JumpAcceleration = 10f;
     public float JumpInputTime = 0.5f;
 
@@ -288,25 +37,29 @@ public class PlayerController : MonoBehaviour
     /// <summary>
     /// Reference for the RigidBody2D gravity setting
     /// </summary>
-    [ReadOnly] public float Gravity = 10f;
+    [Diagnostic] public float Gravity = 10f;
 
-    [ReadOnly] public bool CollisionGround;
-    [ReadOnly] public bool CollisionCeiling;
-    [ReadOnly] public bool CollisionLeft;
-    [ReadOnly] public bool CollisionRight;
-    [ReadOnly] public float JumpAccumulatorLast;
-    [ReadOnly] public float JumpInputCaptureTime;
+    [Diagnostic] public bool CollisionGround;
+    [Diagnostic] public bool CollisionCeiling;
+    [Diagnostic] public bool CollisionLeft;
+    [Diagnostic] public bool CollisionRight;
+    [Diagnostic] public float JumpAccumulatorLast;
+    [Diagnostic] public float JumpInputCaptureTime;
 
-    [ReadOnly] public bool Up;
-    [ReadOnly] public bool Down;
-    [ReadOnly] public bool Left;
-    [ReadOnly] public bool Right;
-    [ReadOnly] public bool Jump;
+    [Diagnostic] public bool Up;
+    [Diagnostic] public bool Down;
+    [Diagnostic] public bool Left;
+    [Diagnostic] public bool Right;
+    [Diagnostic] public bool Jump;
 
-    [ReadOnly] public PlayerState State;
+    [Diagnostic] public PlayerState State;
+    [Diagnostic] public PlayerState NextState;
 
-    Vector2 playerVelocity;
-    Vector2 playerAcceleration;
+    // Used for encapsulating sprite renderer / animator and updating for state transitions
+    protected PlayerStateAnimator PlayerStateAnimator;
+
+    // Parameters (set from public facing parameters) (set in constructor)
+    protected float MaxRunStartVelocity;
 
     // Scaling:
     //
@@ -318,29 +71,50 @@ public class PlayerController : MonoBehaviour
     //
     float accelerationFrameScale = 100f;
 
-    PlayerState playerState;
     PlayerInputState playerInputState;
     CollisionState playerCollisionState;
 
+    // Player sprites are setup Right-Facing. If they're flipped, the kinematics
+    // responds accordingly.
     bool playerFlippedX;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        playerState = PlayerState.Idle;
-        playerVelocity = new Vector2();
-        playerAcceleration = new Vector2();
         playerCollisionState = new CollisionState();
         playerInputState = new PlayerInputState();
         playerFlippedX = false;
+
+        this.PlayerStateAnimator = new PlayerStateAnimator(PlayerState.Idle, this.PlayerAnimatorIdle, this.PlayerSpriteRendererIdle, "TimeScale");
+
+        this.MaxRunStartVelocity = this.MaxRunVelocity / 10.0f;
     }
 
     // Update is called once per frame
     void FixedUpdate()
     {
+        // Procedure
+        //
+        // 0) Get the current frame's velocity vector
+        // 1) Capture input / collision state for the player's RigidBody2D
+        // 2) Capture desired state based on collision
+        //      -> Transition: Update Animators, Set Diagnostics, Return
+        //      -> Else:       Continue
+        //
+
+        // 3) Process state update for the player's velocity vector
+        // 4) Process gravity (apply terminal velocity)
+        // 5) Determine next state (based on velocity change)
+        //      -> New State:  Set new state animation
+        //      -> Same State: Process same state animation update
+        // 6) Update Player Velocity (ACTUAL VECTOR)
+        // 7) Set Diagnostics
+        //
+
+
         // Setup Player Velocity (use current "memory" if it is managed for this Vector2)
         //
-        playerVelocity = this.Player.linearVelocity;
+        var playerVelocity = this.Player.linearVelocity;
 
         // Capture Input State
         this.playerInputState.Capture(this.Player);
@@ -348,13 +122,714 @@ public class PlayerController : MonoBehaviour
         // Capture Collision State
         this.playerCollisionState.Capture(this.Player);
 
-        // Process Player State Update:  Updates the playerVelocity / playerAcceleration / playerState variables
-        ProcessPlayerStateUpdate();
+        // State Transition? There could be a new collision to transition the state
+        var stateDesired = DetermineNextState(this.PlayerStateAnimator.State, playerVelocity);
 
-        // Update Player Animators
-        SetPlayerStateAnimation();
+        // -> Update State Animator, Set Diagnostics, and Return. Next frame will start to take inputs.
+        if (stateDesired != this.PlayerStateAnimator.State)
+        {
+            // Set State Animator
+            this.PlayerStateAnimator.Set(stateDesired, GetAnimator(stateDesired), GetRenderer(stateDesired));
 
-        // Update some of our diagnostics
+            // Diagnostics
+            SetDiagnostics(stateDesired);
+
+            // Next Frame
+            return;
+        }
+
+        // Update Velocity (ref playerVelocity)
+        ProcessStateUpdate(ref playerVelocity, Time.deltaTime);
+        ProcessGravity(ref playerVelocity);
+
+        // Get Next State (based on NEW velocity)
+        var nextState = DetermineNextState(this.PlayerStateAnimator.State, playerVelocity);
+
+        // No State Change
+        if (nextState == this.PlayerStateAnimator.State)
+        {
+            // Applies final velocity vector to the state animation
+            ProcessStateAnimationUpdate(playerVelocity, Time.deltaTime);
+        }
+
+        // State Change
+        else
+        {
+            // Set Next State Animators
+            this.PlayerStateAnimator.Set(nextState, GetAnimator(stateDesired), GetRenderer(stateDesired));
+        }
+
+        // UPDATE PLAYER VELOCITY (RigidBody2D)
+        //
+        this.Player.linearVelocity = playerVelocity;
+
+        // Diagnostics
+        SetDiagnostics(nextState);
+    }
+
+    private PlayerState DetermineNextState(PlayerState currentState, Vector2 currentVelocity)
+    {
+        switch (currentState)
+        {
+            case PlayerState.Idle:
+            {
+                if (this.playerCollisionState.CollisionGround.IsSet())
+                {
+                    // -> MovementGround
+                    if (this.playerInputState.MoveLeftInput.IsSet() ||
+                        this.playerInputState.MoveRightInput.IsSet())
+                        return PlayerState.MovementGroundStart;
+
+                    // -> JumpStart
+                    else if (this.playerInputState.JumpInput.IsSet() &&
+                             this.playerInputState.JumpInput.IsFirst())
+                        return PlayerState.JumpStart;
+
+                    // -> MorphStart
+                    else if (this.playerInputState.MoveDownInput.IsSet())
+                        return PlayerState.MorphStart;
+
+                    // -> Idle
+                    else
+                        return PlayerState.Idle;
+                }
+                else
+                    throw new Exception("Idle state when no collision with ground layer detected");
+            }
+            case PlayerState.MovementGround:
+            {
+                if (this.playerCollisionState.CollisionGround.IsSet())
+                {
+                    // -> JumpStart
+                    if (this.playerInputState.JumpInput.IsSet() &&
+                        this.playerInputState.JumpInput.IsFirst())
+                        return PlayerState.JumpStart;
+
+                    // -> MorphStart
+                    else if (this.playerInputState.MoveDownInput.IsSet())
+                        return PlayerState.MorphStart;
+
+                    // -> MovementGroundEnd
+                    else if (Math.Abs(currentVelocity.x) <= this.MaxRunStartVelocity)
+                        return PlayerState.MovementGroundEnd;
+
+                    // -> MovementGround
+                    else
+                        return PlayerState.MovementGround;
+                }
+                else
+                    throw new Exception("MovementGround state when no collision with ground layer detected");
+            }
+            case PlayerState.JumpingNormal:
+            {
+                // TODO: Need to measure proximity to the ground surface(s)
+
+                if (!this.playerCollisionState.CollisionGround.IsSet())
+                {
+                    // -> JumpEnd (!! This should be set already !!) (where did the jump end?)
+                    if (this.playerCollisionState.CollisionGround.IsSet())
+                        return PlayerState.JumpEnd;
+
+                    else
+                        return PlayerState.JumpingNormal;
+                }
+                else
+                    throw new Exception("JumpingNormal state when collision with ground layer detected");
+            }
+            case PlayerState.JumpingSpin:
+            {
+                // TODO: Need to measure proximity to the ground surface(s)
+
+                // -> JumpingSpin
+                if (!this.playerCollisionState.CollisionGround.IsSet())
+                    return PlayerState.JumpingSpin;
+
+                // -> JumpEnd
+                else
+                    return PlayerState.JumpEnd;
+            }
+            case PlayerState.Morphed:
+            {
+                // Morphed on the ground
+                if (this.playerCollisionState.CollisionGround.IsSet())
+                {
+                    // -> MorphEnd
+                    if (this.playerInputState.MoveUpInput.IsSet())
+                        return PlayerState.MorphEnd;
+
+                    else
+                        return PlayerState.Morphed;
+                }
+
+                // Morphed in the air
+                else
+                {
+                    // -> MorphEnd
+                    if (this.playerInputState.MoveUpInput.IsSet())
+                        return PlayerState.MorphEnd;
+
+                    else
+                        return PlayerState.Morphed;
+                }
+            }
+            case PlayerState.MovementGroundStart:
+            {
+                // On the ground
+                if (this.playerCollisionState.CollisionGround.IsSet())
+                {
+                    // -> MovementGround
+                    if (Math.Abs(currentVelocity.x) >= this.MaxRunStartVelocity)
+                        return PlayerState.MovementGround;
+
+                    // -> Idle
+                    else if (currentVelocity.x == 0)
+                        return PlayerState.Idle;
+
+                    // -> MovementGroundStart
+                    else
+                        return PlayerState.MovementGroundStart;
+                }
+                else
+                    throw new Exception("MovemengGroundStart while no collision with ground detected");
+            }
+            case PlayerState.MovementGroundEnd:
+            {
+                // On the ground
+                if (this.playerCollisionState.CollisionGround.IsSet())
+                {
+                    // -> MovementGround
+                    if (Math.Abs(currentVelocity.x) >= this.MaxRunStartVelocity)
+                        return PlayerState.MovementGround;
+
+                    // -> Idle
+                    else if (currentVelocity.x == 0)
+                        return PlayerState.Idle;
+
+                    // -> MovementGroundEnd
+                    else
+                        return PlayerState.MovementGroundEnd;
+                }
+                else
+                    throw new Exception("MovementGroundEnd while no collision with ground detected");
+            }
+            case PlayerState.MovementGroundLTR:
+            {
+                // TODO
+                return PlayerState.MovementGround;
+            }
+            case PlayerState.MovementGroundRTL:
+            {
+                // TODO
+                return PlayerState.MovementGround;
+            }
+            case PlayerState.JumpStart:
+            {
+                // TODO
+                if (this.playerInputState.MoveRightInput.IsSet() ||
+                    this.playerInputState.MoveLeftInput.IsSet())
+                {
+                    return PlayerState.JumpingSpin;
+                }
+                else
+                    return PlayerState.JumpingNormal;
+            }
+            case PlayerState.JumpEnd:
+            {
+                // -> MovementGround
+                if (this.playerCollisionState.CollisionGround.IsSet())
+                {
+                    return PlayerState.MovementGround;
+                }
+                else
+                    return PlayerState.JumpEnd;
+            }
+
+            // Fixed Animation: State transition must complete
+            case PlayerState.MorphStart:
+            {
+                // -> Morphed
+                if (this.PlayerStateAnimator.IsFinished())
+                    return PlayerState.Morphed;
+
+                else
+                    return PlayerState.MorphStart;
+            }
+
+            // Fixed Animation: State transition must complete
+            case PlayerState.MorphEnd:
+            {
+                // Un-morph animation finished
+                if (this.PlayerStateAnimator.IsFinished())
+                {
+                    // -> MovementGround
+                    if (this.playerCollisionState.CollisionGround.IsSet())
+                        return PlayerState.MovementGround;
+
+                    // -> JumpingNormal
+                    else
+                        return PlayerState.JumpingNormal;
+                }
+                else
+                    return PlayerState.MorphEnd;
+            }
+            default:
+                throw new Exception("Unhandled state transition PlayerController.DetermineNextState");
+        }
+    }
+
+    private void ProcessStateUpdate(ref Vector2 playerVelocity, float deltaTime)
+    {
+        switch (this.PlayerStateAnimator.State)
+        {
+            case PlayerState.Idle:
+                ProcessIdle(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.JumpingNormal:
+                ProcessJumpingNormal(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.JumpStart:
+                ProcessJumpStart(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.JumpEnd:
+                ProcessJumpEnd(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.JumpingSpin:
+                ProcessJumpingSpin(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.Morphed:
+                ProcessMorphed(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.MovementGround:
+                ProcessMovementGround(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.MovementGroundStart:
+                ProcessMovementGroundStart(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.MovementGroundEnd:
+                ProcessMovementGroundEnd(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.MovementGroundLTR:
+                ProcessMovementGroundLTR(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.MovementGroundRTL:
+                ProcessMovementGroundRTL(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.MorphStart:
+                ProcessMorphStart(ref playerVelocity, deltaTime); break;
+
+            case PlayerState.MorphEnd:
+                ProcessMorphEnd(ref playerVelocity, deltaTime); break;
+
+            default:
+                throw new Exception("Unhandled PlayerState:  PlayerController.ProcessStateUpdate(...)");
+        }
+    }
+
+    private void ProcessIdle(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Procedure:  Set player velocity based on current frame's
+        //             input parameters & delta time. How long did
+        //             the action take place?
+        //
+
+        // Idle: May be that the velocity near zero is finicky
+        //
+        playerVelocity.x = 0;
+    }
+    private void ProcessJumpingNormal(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Jump Envelope:
+        //
+        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
+        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
+        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
+        //
+
+        // Jumping (in the air)
+        if (!this.playerCollisionState.CollisionGround.IsSet())
+        {
+            // TODO: Mid-air normal-jump LTR, RTL transitions
+
+            // Right
+            if (!this.playerFlippedX)
+            {
+                // Accelerate
+                if (this.playerInputState.MoveRightInput.IsSet())
+                    playerVelocity.x += this.RunAcceleration * accelerationFrameScale * deltaTime;
+
+                // Decelerate
+                else if (this.playerInputState.MoveLeftInput.IsSet())
+                    playerVelocity.x -= this.RunAcceleration * accelerationFrameScale * deltaTime;
+            }
+
+            // Left
+            else
+            {
+                // Accelerate
+                if (this.playerInputState.MoveLeftInput.IsSet())
+                    playerVelocity.x -= this.RunAcceleration * accelerationFrameScale * deltaTime;
+
+                // Decelerate
+                else if (this.playerInputState.MoveRightInput.IsSet())
+                    playerVelocity.x += this.RunAcceleration * accelerationFrameScale * deltaTime;
+            }
+
+        }
+        else
+            throw new Exception("ProcessJumpingNormal:  Detected ground collision! Should've been handled already!");
+    }
+    private void ProcessJumpStart(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Jump Envelope:
+        //
+        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
+        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
+        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
+        //
+
+        playerVelocity.y = this.MaxJumpVelocity;
+
+        // TODO: Apply JumpStart "velocity accumulator". 
+
+        // Start of Jump
+        //if (this.playerInputState.JumpInput.IsSet() &&
+        //    this.playerInputState.JumpInput.GetAccumulator() < this.JumpInputTime)
+        // {
+        //     // FIX JUMP ACCELERATION (Needs capture also...)
+        //     playerVelocity.y = this.MaxJumpVelocity;
+        //     //playerVelocity.y += (this.JumpAcceleration * Time.deltaTime * accelerationFrameScale);
+        // }
+    }
+    private void ProcessJumpEnd(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Jump Envelope:
+        //
+        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
+        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
+        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
+        //
+
+        //playerVelocity.y = this.MaxJumpVelocity;
+
+        // TODO: Apply JumpStart "velocity accumulator". 
+
+        // Start of Jump
+        //if (this.playerInputState.JumpInput.IsSet() &&
+        //    this.playerInputState.JumpInput.GetAccumulator() < this.JumpInputTime)
+        // {
+        //     // FIX JUMP ACCELERATION (Needs capture also...)
+        //     playerVelocity.y = this.MaxJumpVelocity;
+        //     //playerVelocity.y += (this.JumpAcceleration * Time.deltaTime * accelerationFrameScale);
+        // }
+    }
+    private void ProcessJumpingSpin(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Jump Envelope:
+        //
+        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
+        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
+        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
+        //
+
+        // Jumping (in the air)
+        if (!this.playerCollisionState.CollisionGround.IsSet())
+        {
+            // Right
+            if (!this.playerFlippedX)
+            {
+                // Accelerate
+                if (this.playerInputState.MoveRightInput.IsSet())
+                    playerVelocity.x += this.RunAcceleration * accelerationFrameScale * deltaTime;
+
+                // Decelerate
+                else if (this.playerInputState.MoveLeftInput.IsSet())
+                    playerVelocity.x -= this.RunAcceleration * accelerationFrameScale * deltaTime;
+            }
+
+            // Left
+            else
+            {
+                // Accelerate
+                if (this.playerInputState.MoveLeftInput.IsSet())
+                    playerVelocity.x -= this.RunAcceleration * accelerationFrameScale * deltaTime;
+
+                // Decelerate
+                else if (this.playerInputState.MoveRightInput.IsSet())
+                    playerVelocity.x += this.RunAcceleration * accelerationFrameScale * deltaTime;
+            }
+
+        }
+        else
+            throw new Exception("ProcessJumpingNormal:  Detected ground collision! Should've been handled already!");
+    }
+    private void ProcessMorphed(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Ground
+        if (this.playerCollisionState.CollisionGround.IsSet())
+        {
+            // For now, let the velocity be set by MovementGround
+            ProcessMovementGround(ref playerVelocity, deltaTime);
+        }
+
+        // Air
+        else
+            return;
+    }
+    private void ProcessMorphStart(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Probably some physics to consider
+        return;
+    }
+    private void ProcessMorphEnd(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // Probably some physics to consider
+        return;
+    }
+    private void ProcessMovementGroundStart(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // For now, let the velocity be set by MovementGround
+        ProcessMovementGround(ref playerVelocity, deltaTime);
+    }
+    private void ProcessMovementGroundEnd(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // For now, let the velocity be set by MovementGround
+        ProcessMovementGround(ref playerVelocity, deltaTime);
+    }
+    private void ProcessMovementGroundLTR(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // For now, let the velocity be set by MovementGround
+        ProcessMovementGround(ref playerVelocity, deltaTime);
+    }
+    private void ProcessMovementGroundRTL(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // For now, let the velocity be set by MovementGround
+        ProcessMovementGround(ref playerVelocity, deltaTime);
+    }
+    private void ProcessMovementGround(ref Vector2 playerVelocity, float deltaTime)
+    {
+        // MovementGround
+        //
+        // 0) Double check the collision capture (not needed, but keep these in there)
+        // 1) Movement:
+        //      - Acceleration / Deceleration / Auto-Decelration (player lets go of input)
+        //      - Max Velocity (clamp)
+        //      - Right-to-Left / Left-to-Right transitions (TODO)
+        // 
+        // For the RTL / LTR transition, be sure to clamp the value at zero when the
+        // sign change is detected (for now).
+        //
+
+
+        if (!this.playerCollisionState.CollisionGround.IsSet())
+            throw new Exception("ProcessMovementGround:  Detected no ground collision!");
+
+        else
+        {
+            // Left
+            if (playerVelocity.x < 0)
+            {
+                // Decelerate
+                if (this.playerInputState.MoveRightInput.IsSet())
+                    playerVelocity.x += this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
+
+                // Accelerate
+                else if (this.playerInputState.MoveLeftInput.IsSet())
+                    playerVelocity.x -= this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
+
+                // Decelerate (Auto)
+                else
+                    playerVelocity.x += this.RunAutoDeceleration * Time.deltaTime * accelerationFrameScale;
+            }
+
+            // Right
+            else
+            {
+                // Decelerate
+                if (this.playerInputState.MoveLeftInput.IsSet())
+                    playerVelocity.x -= this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
+
+                // Accelerate
+                else if (this.playerInputState.MoveRightInput.IsSet())
+                    playerVelocity.x += this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
+
+                // Decelerate (Auto)
+                else
+                    playerVelocity.x -= this.RunAutoDeceleration * Time.deltaTime * accelerationFrameScale;
+            }
+        }
+
+        // Max Velocity
+        if (playerVelocity.x < -1 * this.MaxRunVelocity)
+            playerVelocity.x = -1 * this.MaxRunVelocity;
+
+        // Zero (RTL / LTR)
+        if (this.playerFlippedX && playerVelocity.x > 0)
+            playerVelocity.x = 0;
+
+        else if (!this.playerFlippedX && playerVelocity.x < 0)
+            playerVelocity.x = 0;
+    }
+    private void ProcessGravity(ref Vector2 playerVelocity)
+    {
+        // Terminal Velocity
+        playerVelocity.y = Math.Max(playerVelocity.y, -1 * this.MaxFallVelocity);
+    }
+
+    #region Animation State Update
+    private void ProcessStateAnimationUpdate(Vector2 playerVelocity, float deltaTime)
+    {
+        // Animations: There are two types of animations:  fixed time, and scaled. Any of
+        //             the data about the player can be used to see where the animation should
+        //             be for scaled animations. Collision detection, velocity, collision layer
+        //             proximity, etc...
+        //
+        //             Some (any) animations may be updated as fixed-time animations. Example:
+        //             PlayerState.Idle. There is no parameter to tell you "what time it is". So,
+        //             you can call Update(deltaTime) which scales it accordingly, with periodic
+        //             repeat.
+        //          
+
+        // Calculate a (cheap) jumping scale factor
+        var jumpOffset = playerVelocity.y > 0f ? 0.5f - (playerVelocity.y / this.MaxJumpVelocity / 2f) :
+                                                 0.5f + (playerVelocity.y / this.MaxFallVelocity / 2f);
+
+        switch (this.PlayerStateAnimator.State)
+        {
+            // Scaled
+            case PlayerState.Morphed:
+            case PlayerState.MovementGround:
+            case PlayerState.MovementGroundStart:
+            case PlayerState.MovementGroundEnd:
+            {
+                this.PlayerStateAnimator.Update(Math.Abs(playerVelocity.x) / this.MaxRunVelocity);
+            }
+            break;
+            case PlayerState.JumpingNormal:
+            {
+                this.PlayerStateAnimator.Update(jumpOffset);
+            }
+            break;
+            case PlayerState.JumpStart:
+            case PlayerState.JumpEnd:
+            {
+                // Proximity to ground! TODO
+                this.PlayerStateAnimator.Update(deltaTime);
+            }
+            break;
+
+            // Fixed Time (periodic)
+            case PlayerState.Idle:
+            case PlayerState.JumpingSpin:
+            case PlayerState.MovementGroundLTR:
+            case PlayerState.MovementGroundRTL:
+            case PlayerState.MorphStart:
+            case PlayerState.MorphEnd:
+            {
+                this.PlayerStateAnimator.Update(deltaTime);
+            }
+            break;
+
+            default:
+                throw new Exception("Unhandled PlayerState:  PlayerController.ProcessStateUpdate(...)");
+        }
+    }
+    private void FlipSpritesX()
+    {
+        // FLIP-X
+        this.playerFlippedX = !this.playerFlippedX;
+
+        this.PlayerSpriteRendererIdle.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererJumpNormal.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererJumpSpin.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererRunning.flipX = this.playerFlippedX;
+        this.PlayerSpriteRendererMorph.flipX = this.playerFlippedX;
+    }
+    #endregion
+
+    private Animator GetAnimator(PlayerState state)
+    {
+        switch (state)
+        {
+            case PlayerState.Idle:
+                return this.PlayerAnimatorIdle;
+
+            case PlayerState.MovementGround:
+                return this.PlayerAnimatorRunning;
+
+            case PlayerState.JumpingNormal:
+                return this.PlayerAnimatorJumpNormal;
+
+            case PlayerState.JumpingSpin:
+                return this.PlayerAnimatorJumpSpin;
+
+            case PlayerState.Morphed:
+                return this.PlayerAnimatorMorph;
+
+            case PlayerState.MovementGroundStart:
+                return this.PlayerAnimatorRunning;
+
+            case PlayerState.MovementGroundEnd:
+                return this.PlayerAnimatorRunning;
+
+            case PlayerState.MovementGroundLTR:
+                return this.PlayerAnimatorRunning;
+
+            case PlayerState.MovementGroundRTL:
+                return this.PlayerAnimatorRunning;
+
+            case PlayerState.JumpStart:
+                return this.PlayerAnimatorJumpNormal;
+
+            case PlayerState.JumpEnd:
+                return this.PlayerAnimatorJumpNormal;
+
+            case PlayerState.MorphStart:
+                return this.PlayerAnimatorIdle;
+
+            case PlayerState.MorphEnd:
+                return this.PlayerAnimatorIdle;
+            default:
+                throw new Exception("Unhandled PlayerState:  PlayerController.GetAnimator");
+        }
+    }
+    private SpriteRenderer GetRenderer(PlayerState state)
+    {
+        switch (state)
+        {
+            case PlayerState.Idle:
+                return this.PlayerSpriteRendererIdle;
+
+            case PlayerState.MovementGround:
+                return this.PlayerSpriteRendererRunning;
+
+            case PlayerState.JumpingNormal:
+                return this.PlayerSpriteRendererJumpNormal;
+
+            case PlayerState.JumpingSpin:
+                return this.PlayerSpriteRendererJumpSpin;
+
+            case PlayerState.Morphed:
+                return this.PlayerSpriteRendererMorph;
+
+            case PlayerState.MovementGroundStart:
+            case PlayerState.MovementGroundEnd:
+            case PlayerState.MovementGroundLTR:
+            case PlayerState.MovementGroundRTL:
+                return this.PlayerSpriteRendererRunning;
+
+            case PlayerState.JumpStart:
+            case PlayerState.JumpEnd:
+                return this.PlayerSpriteRendererJumpNormal;
+
+            case PlayerState.MorphStart:
+            case PlayerState.MorphEnd:
+                return this.PlayerSpriteRendererIdle;
+            default:
+                throw new Exception("Unhandled PlayerState:  PlayerController.GetAnimator");
+        }
+    }
+    private void SetDiagnostics(PlayerState desiredState)
+    {
         this.CollisionCeiling = this.playerCollisionState.CollisionCeiling.IsSet();
         this.CollisionGround = this.playerCollisionState.CollisionGround.IsSet();
         this.CollisionLeft = this.playerCollisionState.CollisionLeft.IsSet();
@@ -368,446 +843,7 @@ public class PlayerController : MonoBehaviour
         this.Right = this.playerInputState.MoveRightInput.IsSet();
         this.Jump = this.playerInputState.JumpInput.IsSet();
 
-        this.State = this.playerState;
-
-        // Finally, Set Player Rigid Body Update (up to owners of the struct to say how memory is managed)
-        //
-        this.Player.linearVelocity = playerVelocity;
-    }
-
-    private void ProcessPlayerStateUpdate()
-    {
-        // Design:  The states of motion should all follow a very clear / concise state machine
-        //          implementation. This will help to avoid fidgeting with issues that arise from
-        //          complexities of the rendering and 2D physics.
-        //
-        //          There will be Process[State] methods in the following switch statement. Each
-        //          Process[State] method should only detail its own state manipulation - apart
-        //          from any other coupled state. For example:  ProcessRunning sets ~Running
-        //          to player state; but does not affect the animators (other than left-right flip
-        //          local transform)
-        //
-        //          The motion for some of the player's animation states has a 2-frame "Start" 
-        //          sequence. So, the Start (state) has been separated to a separate logic sequence
-        //          which will accompany user inputs. The states should also separate X from Y inputs
-        //          to decouple any of the complexities from state changing.
-        //
-        // Procedure:
-        //
-        // 0) Capture Collision / Input data for the frame (should have already been completed)
-        // 1) Process Current State
-        // 2) Set Current State Animation (key frames)
-        //
-
-        var jumping = (this.playerState & PlayerState.JumpingSpin) != 0 ||
-                      (this.playerState & PlayerState.JumpingNormal) != 0;
-
-        // PLAYER STATE (Can safely process X-Y dimensions separately)
-        switch (this.playerState)
-        {
-            case PlayerState.Running | PlayerState.JumpingNormal:
-            {
-                ProcessRunning();
-                ProcessJumpingNormal();
-            }
-            break;
-
-            case PlayerState.Running | PlayerState.JumpingSpin:
-            {
-                ProcessRunning();
-                ProcessJumpingSpin();
-            }
-            break;
-
-            case PlayerState.Running | PlayerState.JumpStart:
-            {
-                ProcessRunning();
-                ProcessJumpStart();
-            }
-            break;
-
-            case PlayerState.Running:
-            {
-                ProcessRunning();
-
-                // -> JumpStart (~JumpingNormal, ~JumpingSpin, Jump Input Set, Jump Input (1st), On Ground)
-                if (!jumping &&
-                    this.playerInputState.JumpInput.IsSet() &&
-                    this.playerInputState.JumpInput.IsFirst() &&
-                    this.playerCollisionState.CollisionGround.IsSet())
-                    this.playerState |= PlayerState.JumpStart;
-            }
-            break;
-            case PlayerState.JumpStart:
-            {
-                ProcessJumpStart();
-
-                // -> Left / Right
-                if (this.playerInputState.MoveLeftInput.IsSet() ||
-                    this.playerInputState.MoveRightInput.IsSet())
-                    this.playerState |= PlayerState.Running;
-            }
-            break;
-
-            case PlayerState.JumpingNormal:
-            {
-                ProcessJumpingNormal();
-
-                // -> Left / Right
-                if (this.playerInputState.MoveLeftInput.IsSet() ||
-                    this.playerInputState.MoveRightInput.IsSet())
-                    this.playerState |= PlayerState.Running;
-            }
-            break;
-
-            case PlayerState.JumpingSpin:
-            {
-                ProcessJumpingSpin();
-
-                // -> Left / Right
-                if (this.playerInputState.MoveLeftInput.IsSet() ||
-                    this.playerInputState.MoveRightInput.IsSet())
-                    this.playerState |= PlayerState.Running;
-            }
-            break;
-
-            case PlayerState.Morphed:
-            {
-
-            }
-            break;
-
-            case PlayerState.Idle:
-            {
-                // -> JumpStart (Not Jumping, Jump Input Set, Jump Input (1st), On Ground)
-                if (!jumping &&
-                    this.playerInputState.JumpInput.IsSet() &&
-                    this.playerInputState.JumpInput.IsFirst() &&
-                    this.playerCollisionState.CollisionGround.IsSet())
-                    this.playerState |= PlayerState.JumpStart;
-
-                // -> Left / Right
-                if (this.playerInputState.MoveLeftInput.IsSet() ||
-                    this.playerInputState.MoveRightInput.IsSet())
-                    this.playerState |= PlayerState.Running;
-
-                else
-                {
-                    // Nothing to do
-                }
-            }
-            break;
-
-
-            default:
-                break;
-        }
-    }
-
-    private void SetPlayerStateAnimation()
-    {
-        // Calculate jump offset (if jumping, this will be used)
-        var jumpOffset = this.playerVelocity.y > 0f ? 0.5f - (this.playerVelocity.y / this.MaxJumpVelocity / 2f) :
-                                                      0.5f + (this.playerVelocity.y / this.MaxFallVelocity / 2f);
-
-        // NOTE:  The "enabled" setting is the checkbox next to the component in the
-        //        UI. This will be enabled / disabled for sprite renderers
-
-        // Enable Proper Sprite Renderers
-        switch (this.playerState)
-        {
-            // Jumping Takes Precedence
-            case PlayerState.Running | PlayerState.JumpingNormal:
-            case PlayerState.Running | PlayerState.JumpStart:
-            case PlayerState.JumpStart:
-            case PlayerState.JumpingNormal:
-            {
-                // Be careful to set this once (not every frame)
-                if (!this.PlayerSpriteRendererJumpNormal.enabled)
-                {
-                    this.PlayerSpriteRendererJumpNormal.enabled = true;
-                    this.PlayerSpriteRendererJumpSpin.enabled = false;
-                    this.PlayerSpriteRendererIdle.enabled = false;
-                    this.PlayerSpriteRendererRunning.enabled = false;
-                    this.PlayerSpriteRendererMorph.enabled = false;
-                }
-            }
-            break;
-
-            case PlayerState.Running | PlayerState.JumpingSpin:
-            case PlayerState.JumpingSpin:
-            {
-                // Be careful to set this once (not every frame)
-                if (!this.PlayerSpriteRendererJumpSpin.enabled)
-                {
-                    this.PlayerSpriteRendererJumpNormal.enabled = false;
-                    this.PlayerSpriteRendererJumpSpin.enabled = true;
-                    this.PlayerSpriteRendererIdle.enabled = false;
-                    this.PlayerSpriteRendererRunning.enabled = false;
-                    this.PlayerSpriteRendererMorph.enabled = false;
-                }
-            }
-            break;
-
-            // Running
-            case PlayerState.Running:
-
-                // Be careful to set this once (not every frame)
-                if (!this.PlayerSpriteRendererRunning.enabled)
-                {
-                    this.PlayerSpriteRendererJumpNormal.enabled = false;
-                    this.PlayerSpriteRendererJumpSpin.enabled = false;
-                    this.PlayerSpriteRendererIdle.enabled = false;
-                    this.PlayerSpriteRendererRunning.enabled = true;
-                    this.PlayerSpriteRendererMorph.enabled = false;
-                }
-                break;
-
-            // Morphed
-            case PlayerState.Morphed:
-                break;
-
-            // Idle
-            case PlayerState.Idle:
-            default:
-
-                // Be careful to set this once (not every frame)
-                if (!this.PlayerSpriteRendererIdle.enabled)
-                {
-                    this.PlayerSpriteRendererJumpNormal.enabled = false;
-                    this.PlayerSpriteRendererJumpSpin.enabled = false;
-                    this.PlayerSpriteRendererIdle.enabled = true;
-                    this.PlayerSpriteRendererRunning.enabled = false;
-                    this.PlayerSpriteRendererMorph.enabled = false;
-                }
-                break;
-        }
-
-        // Change State
-        switch (this.playerState)
-        {
-            case PlayerState.Running | PlayerState.JumpingNormal:
-            case PlayerState.Running | PlayerState.JumpingSpin:
-            case PlayerState.Running | PlayerState.JumpStart:
-            case PlayerState.JumpStart:
-            case PlayerState.JumpingNormal:
-            case PlayerState.JumpingSpin:
-
-                // Set Frame (using time scale)
-                this.PlayerAnimatorJumpNormal.SetFloat("TimeScale", jumpOffset);
-                //this.PlayerAnimatorJumpSpin.SetFloat("TimeScale", jumpOffset);  Can't scale these...
-                break;
-            case PlayerState.Running:
-
-                // Set Frame (using time scale)
-                this.PlayerAnimatorRunning.SetFloat("TimeScale", Math.Abs(this.Player.linearVelocityX) / this.MaxRunVelocity);
-                break;
-
-            case PlayerState.Morphed:
-            case PlayerState.Idle:
-                break;
-            default:
-                break;
-        }
-
-    }
-
-    // Movement in Y-Direction Only
-    private void ProcessJumpStart()
-    {
-        // Jump Envelope:
-        //
-        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
-        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
-        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
-        //                     Also, the next jumping state depends on the user input at this point. Directional
-        //                     input will trigger a spin jump.
-        //
-
-        // Start of Jump
-        if (this.playerInputState.JumpInput.IsSet() &&
-            this.playerInputState.JumpInput.GetAccumulator() < this.JumpInputTime)
-        {
-            // FIX JUMP ACCELERATION (Needs capture also...)
-            playerVelocity.y = this.MaxJumpVelocity;
-            //playerVelocity.y += (this.JumpAcceleration * Time.deltaTime * accelerationFrameScale);
-        }
-
-        // -> Jumping (in the air)
-        else
-        {
-            // ~JumpStart (remove start state)
-            this.playerState &= ~PlayerState.JumpStart;
-
-            // -> Jumping (Spin, or Normal)
-            if (this.playerInputState.MoveLeftInput.IsSet() ||
-                this.playerInputState.MoveRightInput.IsSet())
-                this.playerState |= PlayerState.JumpingSpin;
-            else
-                this.playerState |= PlayerState.JumpingNormal;
-        }
-    }
-    private void ProcessJumpingNormal()
-    {
-        // Jump Envelope:
-        //
-        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
-        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
-        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
-        //
-
-        // Jumping (in the air)
-        if (!this.playerCollisionState.CollisionGround.IsSet())
-        {
-            // Nothing to do
-        }
-
-        // -> ~Jumping (on the ground)
-        else
-            this.playerState &= ~PlayerState.JumpingNormal;
-    }
-
-    private void ProcessJumpingSpin()
-    {
-        // Jump Envelope:
-        //
-        // 0) On Ground:       Capture jump input (1st input already capture to start this state)
-        // 1) Start of Jump:   Capture jump input time (for brief configured delta)
-        // 2) Jumping:         Take the actual jump velocity is calculated at this point, then left to gravity.
-        //
-
-        // Jumping (in the air)
-        if (!this.playerCollisionState.CollisionGround.IsSet())
-        {
-            // Nothing to do
-        }
-
-        // -> ~Jumping (on the ground)
-        else
-            this.playerState &= ~PlayerState.JumpingSpin;
-    }
-
-    // Movement in X-Direction Only
-    private void ProcessRunning()
-    {
-        // Running Envelope:
-        //
-        // 0) On Ground:       Capture move inputs (flip animation accordingly)
-        // 1) Start Running:   Accelerate until max velocity / Decelerate until idle
-        // 2) Running:         Max Velocity... / Decelerate until idle
-        //
-
-        // -> Left
-        if (this.playerInputState.MoveLeftInput.IsSet())
-        {
-            // Flip Animation X
-            if (!this.playerFlippedX)
-                FlipSpritesX();
-
-            // Moving Right:  Decelerate
-            if (playerVelocity.x > 0)
-                playerVelocity.x -= this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
-
-            // Moving Left / Idle: Accelerate
-            else
-                playerVelocity.x -= this.RunAcceleration * Time.deltaTime * accelerationFrameScale;
-
-            // Max Velocity (Clamp)
-            if (Math.Abs(playerVelocity.x) > this.MaxRunVelocity)
-                playerVelocity.x = Math.Clamp(playerVelocity.x, -1 * this.MaxRunVelocity, this.MaxRunVelocity);
-        }
-
-        // -> Right
-        else if (this.playerInputState.MoveRightInput.IsSet())
-        {
-            // Un-Flip Animation X
-            if (this.playerFlippedX)
-                FlipSpritesX();
-
-            // Moving Left:  Decelerate
-            if (playerVelocity.x < 0)
-                playerVelocity.x += this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
-
-            // Moving Right / Idle: Accelerate
-            else
-                playerVelocity.x += this.RunAcceleration * Time.deltaTime * accelerationFrameScale;
-
-            // Max Velocity (Clamp)
-            if (playerVelocity.x > this.MaxRunVelocity)
-                playerVelocity.x = Math.Clamp(playerVelocity.x, -1 * this.MaxRunVelocity, this.MaxRunVelocity);
-        }
-
-        else
-        {
-            // Decelerate Until Idle (moving left)
-            if (playerVelocity.x < 0)
-            {
-                playerVelocity.x += this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
-
-                // Clamp at zero
-                playerVelocity.x = Math.Min(playerVelocity.x, 0);
-            }
-
-            else if (playerVelocity.x > 0)
-            {
-                playerVelocity.x -= this.RunDeceleration * Time.deltaTime * accelerationFrameScale;
-
-                // Clamp at zero
-                playerVelocity.x = Math.Max(playerVelocity.x, 0);
-            }
-
-            // -> Idle
-            else
-                this.playerState &= ~PlayerState.Running;               // Remove Running State
-        }
-    }
-
-    private void FlipSpritesX()
-    {
-        // FLIP-X
-        this.playerFlippedX = !this.playerFlippedX;
-
-        this.PlayerSpriteRendererIdle.flipX = this.playerFlippedX;
-        this.PlayerSpriteRendererJumpNormal.flipX = this.playerFlippedX;
-        this.PlayerSpriteRendererJumpSpin.flipX = this.playerFlippedX;
-        this.PlayerSpriteRendererRunning.flipX = this.playerFlippedX;
-        this.PlayerSpriteRendererMorph.flipX = this.playerFlippedX;
-
-        // TRYING NOT TO FIDGET WITH SPRITES
-
-        // There is a convenience setting called "FlipX"; but we need to learn how to tweak 
-        // these "local" transforms. They should all be relative to Player
-        //
-        //var localScaleTop = this.PlayerSpriteRendererTop.transform.localScale;
-        //var localPositionTop = this.PlayerSpriteRendererTop.transform.localPosition;
-        //var localScaleBottom = this.PlayerSpriteRendererBottom.transform.localScale;
-
-        // TOP:  Flip Horizontally; and add necessary offset for sprite size mismatch
-        //localScaleTop.x *= -1;
-
-        // Grid / Sprite Sizes / Relative Scales
-        // -------------------------------------
-        //
-        // Grid Cell Size:             16px
-        // Difference in Top / Bottom: 36 - 25 = 11px
-        // Bottom Scale:               2.25
-        // Top Scale:                  1.5625
-        //
-        // Local Cell Size = 25px
-        // 
-        // So, the local offset is 5px = 1 / 5 (th) of a cell = 0.2;
-        //
-        //localPositionTop.x += this.playerFlippedX ? -0.2f : 0.2f;
-
-        //this.PlayerSpriteRendererTop.transform.localScale = localScaleTop;
-        //this.PlayerSpriteRendererTop.transform.localPosition = localPositionTop;
-
-        // BOTTOM: Flip Horizontally
-        //localScaleBottom.x *= -1;
-
-        //this.PlayerSpriteRendererBottom.transform.localScale = localScaleBottom;
-
-        // IDLE: Flip Horizontally
-        //this.PlayerSpriteRendererIdle.flipX = this.playerFlippedX;
+        this.State = this.PlayerStateAnimator.State;
+        this.NextState = desiredState;
     }
 }
